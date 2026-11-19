@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Expert RAW Pro - Galaxy S23 Ultra (Custom Optical Suite)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --oneui-amber: #F59E0B;
+            --oneui-gold: #FBBF24;
+            --oneui-bg: #050505;
+            --oneui-panel: rgba(18, 18, 20, 0.85);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--oneui-bg);
+            color: #F3F4F6;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom One UI Scrollbar Hiding */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Custom Range Slider for One UI Pro Controls */
+        input[type="range"].oneui-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"].oneui-slider::-webkit-slider-runnable-track {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        input[type="range"].oneui-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--oneui-gold);
+            border: 3px solid #121212;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"].oneui-slider:active::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        /* Shutter Flash Animation */
+        @keyframes shutterFlash {
+            0% { opacity: 0.95; }
+            100% { opacity: 0; }
+        }
+        .animate-shutter {
+            animation: shutterFlash 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Focus Peaking Simulation Overlay */
+        .focus-peaking-overlay {
+            background-image: 
+                radial-gradient(circle at 50% 50%, transparent 25%, rgba(16, 185, 129, 0.18) 26%, transparent 28%),
+                repeating-linear-gradient(45deg, rgba(16, 185, 129, 0.12) 0px, rgba(16, 185, 129, 0.12) 1px, transparent 1px, transparent 6px);
+            mix-blend-mode: screen;
+            pointer-events: none;
+        }
+
+        /* Smooth Viewfinder Zoom Transition */
+        #cameraFeed, #fallbackCanvas {
+            transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between bg-black text-white relative">
+
+    <!-- SHUTTER FLASH OVERLAY -->
+    <div id="shutterFlash" class="fixed inset-0 bg-white opacity-0 pointer-events-none z-50"></div>
+
+    <!-- CUSTOM TOAST / NOTIFICATION BANNER (No alert() allowed) -->
+    <div id="toastBanner" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 opacity-0 -translate-y-4 pointer-events-none">
+        <div class="bg-zinc-900/95 border border-amber-500/40 backdrop-blur-md px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-medium text-amber-300">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span id="toastText">Ajuste aplicado</span>
+        </div>
+    </div>
+
+    <!-- TOP BAR: ONE UI EXPERT RAW TELEMETRY & TOOLS -->
+    <header class="z-30 w-full px-3 pt-2 pb-2 bg-gradient-to-b from-black/90 via-black/70 to-transparent flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+            <!-- Hardware Status Badge (Confirms 0.6x Bypassed) -->
+            <div class="flex items-center gap-2">
+                <div class="px-2.5 py-1 rounded-full bg-zinc-900/90 border border-zinc-700/70 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span class="text-[11px] font-semibold tracking-wider text-zinc-200">S23 ULTRA PRO</span>
+                </div>
+                <span class="hidden sm:inline-block text-[10px] font-mono-tech text-zinc-400 bg-zinc-900/80 px-2 py-1 rounded-full border border-zinc-800">
+                    ÓPTICA ACTIVA: 23·70·230mm
+                </span>
+            </div>
+
+            <!-- Live Histogram Canvas -->
+            <div class="flex items-center gap-2 bg-black/70 border border-zinc-800/90 rounded-lg px-2 py-1 backdrop-blur-md" title="Histograma RGB en tiempo real">
+                <canvas id="histogramCanvas" width="84" height="26" class="rounded"></canvas>
+                <div class="flex flex-col text-[9px] font-mono-tech leading-tight text-zinc-400">
+                    <span id="histPeak" class="text-amber-400">RAW 16b</span>
+                    <span id="meteringMode">MATRIZ</span>
+                </div>
+            </div>
+
+            <!-- Quick Utility Toggles -->
+            <div class="flex items-center gap-1.5">
+                <button id="btnGrid" onclick="toggleGrid()" class="p-2 rounded-full bg-zinc-900/80 border border-amber-500/50 text-amber-400 transition active:scale-90" title="Cuadrícula 3x3">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 9h18M3 15h18M9 3v18M15 3v18"/>
+                    </svg>
+                </button>
+                <button id="btnLevel" onclick="toggleLevel()" class="p-2 rounded-full bg-zinc-900/80 border border-amber-500/50 text-amber-400 transition active:scale-90" title="Nivel Electrónico">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 12h4m8 0h4M9 12a3 3 0 106 0 3 3 0 00-6 0z"/>
+                    </svg>
+                </button>
+                <button id="btnFocusPeaking" onclick="toggleFocusPeaking()" class="p-2 rounded-full bg-zinc-900/80 border border-zinc-700 text-zinc-400 transition active:scale-90" title="Focus Peaking (Asistencia Enfoque)">
+                    <span class="text-[10px] font-mono-tech font-bold">PEAK</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Format & Resolution Selector Pill Bar (Strictly excludes UW/Macro) -->
+        <div class="flex items-center justify-between gap-2 text-[11px] font-mono-tech">
+            <div class="flex items-center bg-zinc-900/90 p-0.5 rounded-full border border-zinc-800">
+                <button onclick="setFormat('RAW 16-bit')" data-format="RAW 16-bit" class="format-btn px-2.5 py-1 rounded-full bg-amber-500 text-black font-bold transition">RAW 16-bit</button>
+                <button onclick="setFormat('JPG 200MP')" data-format="JPG 200MP" class="format-btn px-2.5 py-1 rounded-full text-zinc-400 hover:text-white transition">JPG</button>
+                <button onclick="setFormat('PRO VIDEO 8K')" data-format="PRO VIDEO 8K" class="format-btn px-2.5 py-1 rounded-full text-zinc-400 hover:text-white transition">PRO 8K</button>
+            </div>
+
+            <!-- Live Optical Telemetry Readout -->
+            <div class="flex items-center gap-2 bg-zinc-900/80 px-2.5 py-1 rounded-full border border-zinc-800/80 text-zinc-300">
+                <span id="telemetryLens" class="text-amber-400 font-bold">23mm</span>
+                <span class="text-zinc-600">|</span>
+                <span id="telemetryAperture">f/1.7</span>
+                <span class="text-zinc-600">|</span>
+                <span id="telemetryRes">200MP</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN VIEWFINDER STAGE -->
+    <main id="viewfinderContainer" class="relative flex-1 w-full overflow-hidden flex items-center justify-center bg-zinc-950 my-1 rounded-2xl border border-zinc-900">
+        
+        <!-- Live HTML5 Video Stream -->
+        <video id="cameraFeed" autoplay playsinline muted class="w-full h-full object-cover"></video>
+
+        <!-- Fallback Interactive Optical Simulator Canvas (When camera permission denied or unavailable) -->
+        <canvas id="fallbackCanvas" class="hidden w-full h-full object-cover"></canvas>
+
+        <!-- Camera Permission Fallback Notice Badge -->
+        <div id="fallbackBadge" class="hidden absolute top-3 left-3 z-20 bg-zinc-900/90 border border-amber-500/40 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            <div>
+                <p class="text-[11px] font-semibold text-amber-300">Simulador Óptico Activo</p>
+                <p class="text-[10px] text-zinc-400">Sin acceso a hardware de cámara</p>
+            </div>
+            <button onclick="initCamera()" class="ml-1 px-2 py-1 bg-amber-500 text-black text-[10px] font-bold rounded-lg">Reintentar</button>
+        </div>
+
+        <!-- Focus Peaking Visual Effect Layer -->
+        <div id="peakingLayer" class="hidden absolute inset-0 focus-peaking-overlay z-10"></div>
+
+        <!-- Rule of Thirds Grid Overlay -->
+        <div id="gridOverlay" class="absolute inset-0 pointer-events-none z-10 grid grid-cols-3 grid-rows-3">
+            <div class="border-r border-b border-white/20"></div>
+            <div class="border-r border-b border-white/20"></div>
+            <div class="border-b border-white/20"></div>
+            <div class="border-r border-b border-white/20"></div>
+            <div class="border-r border-b border-white/20"></div>
+            <div class="border-b border-white/20"></div>
+            <div class="border-r border-white/20"></div>
+            <div class="border-r border-white/20"></div>
+            <div></div>
+        </div>
+
+        <!-- Electronic Horizon Leveler -->
+        <div id="levelOverlay" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
+            <div class="relative w-48 h-12 flex items-center justify-center">
+                <!-- Fixed Reference Marks -->
+                <div class="w-6 h-[2px] bg-white/50"></div>
+                <div class="w-28"></div>
+                <div class="w-6 h-[2px] bg-white/50"></div>
+                <!-- Dynamic Tilt Bar -->
+                <div id="horizonLine" class="absolute w-24 h-[2px] bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] transition-transform duration-150 flex items-center justify-center">
+                    <span id="tiltAngleText" class=" -mt-5 text-[9px] font-mono-tech text-amber-300 bg-black/60 px-1 rounded">0.0°</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tap-to-Focus Reticle -->
+        <div id="focusReticle" class="hidden absolute z-20 w-16 h-16 -ml-8 -mt-8 border-2 border-amber-400 rounded-xl pointer-events-none transition-all duration-200 flex items-end justify-center pb-1 shadow-[0_0_15px_rgba(251,191,36,0.4)]">
+            <span class="text-[9px] font-mono-tech text-amber-300 bg-black/70 px-1 rounded">AF-S</span>
+        </div>
+
+        <!-- Recording Timer (Visible in PRO VIDEO 8K mode) -->
+        <div id="videoRecIndicator" class="hidden absolute top-3 right-3 z-20 bg-red-600/90 px-3 py-1 rounded-full flex items-center gap-2 font-mono-tech text-xs font-bold shadow-lg">
+            <span class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+            <span id="recTimer">00:00</span>
+        </div>
+
+        <!-- OPTICAL LENS SELECTOR PILLS (ONLY 1x, 3x, 10x — NO 0.6x ULTRA-WIDE) -->
+        <div class="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5">
+            <div id="lensDescription" class="px-2.5 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-zinc-800 text-[10px] font-mono-tech text-amber-300">
+                Gran Angular Principal • 23mm (200MP)
+            </div>
+            <div class="flex items-center gap-2 bg-zinc-950/85 backdrop-blur-xl px-2.5 py-1.5 rounded-full border border-zinc-800/90 shadow-2xl">
+                <!-- 1x Main 23mm -->
+                <button onclick="selectLens('1x')" id="lens-1x" class="lens-btn w-11 h-11 rounded-full flex flex-col items-center justify-center bg-amber-500 text-black font-bold transition-all duration-200 scale-105 shadow-[0_0_12px_rgba(245,158,11,0.5)]">
+                    <span class="text-xs leading-none">1x</span>
+                    <span class="text-[8px] font-mono-tech opacity-80 mt-0.5">23mm</span>
+                </button>
+                <!-- 3x Telephoto 70mm -->
+                <button onclick="selectLens('3x')" id="lens-3x" class="lens-btn w-10 h-10 rounded-full flex flex-col items-center justify-center bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/70 font-semibold transition-all duration-200">
+                    <span class="text-xs leading-none">3x</span>
+                    <span class="text-[8px] font-mono-tech text-zinc-400 mt-0.5">70mm</span>
+                </button>
+                <!-- 10x Periscope 230mm -->
+                <button onclick="selectLens('10x')" id="lens-10x" class="lens-btn w-10 h-10 rounded-full flex flex-col items-center justify-center bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/70 font-semibold transition-all duration-200">
+                    <span class="text-xs leading-none">10x</span>
+                    <span class="text-[8px] font-mono-tech text-zinc-400 mt-0.5">230mm</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- BOTTOM CONTROL DECK: PRO MANUAL DIALS & SHUTTER -->
+    <footer class="z-30 w-full bg-zinc-950/95 border-t border-zinc-900 px-3 pt-2 pb-4 flex flex-col gap-2.5">
+        
+        <!-- Active Manual Slider Drawer -->
+        <div id="manualSliderPanel" class="w-full bg-zinc-900/90 border border-zinc-800 rounded-2xl px-3.5 py-2 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between text-xs font-mono-tech">
+                <div class="flex items-center gap-2">
+                    <span id="activeParamLabel" class="text-amber-400 font-bold">ISO SENSIBILIDAD</span>
+                    <span id="activeParamValue" class="text-white bg-zinc-800 px-2 py-0.5 rounded">AUTO (100)</span>
+                </div>
+                <button onclick="resetCurrentParam()" class="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/30 transition">
+                    AUTO
+                </button>
+            </div>
+            <input id="proParamSlider" type="range" min="0" max="100" value="0" class="oneui-slider w-full my-1">
+            <div id="sliderTicks" class="flex justify-between text-[9px] font-mono-tech text-zinc-500 px-0.5">
+                <span>AUTO</span>
+                <span>50</span>
+                <span>200</span>
+                <span>800</span>
+                <span>1600</span>
+                <span>3200</span>
+            </div>
+        </div>
+
+        <!-- 5 Pro Parameter Selector Tabs (ISO, SPEED, EV, FOCUS, WB) -->
+        <div class="grid grid-cols-5 gap-1.5">
+            <button onclick="selectProTab('ISO')" id="tab-ISO" class="pro-tab py-1.5 px-1 rounded-xl bg-amber-500/15 border border-amber-500/60 flex flex-col items-center justify-center transition">
+                <span class="text-[9px] font-bold tracking-wider text-amber-400">ISO</span>
+                <span id="val-ISO" class="text-[11px] font-mono-tech text-white mt-0.5">AUTO</span>
+            </button>
+            <button onclick="selectProTab('SPEED')" id="tab-SPEED" class="pro-tab py-1.5 px-1 rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center transition">
+                <span class="text-[9px] font-bold tracking-wider text-zinc-400">SPEED</span>
+                <span id="val-SPEED" class="text-[11px] font-mono-tech text-zinc-200 mt-0.5">1/125</span>
+            </button>
+            <button onclick="selectProTab('EV')" id="tab-EV" class="pro-tab py-1.5 px-1 rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center transition">
+                <span class="text-[9px] font-bold tracking-wider text-zinc-400">EV</span>
+                <span id="val-EV" class="text-[11px] font-mono-tech text-zinc-200 mt-0.5">0.0</span>
+            </button>
+            <button onclick="selectProTab('FOCUS')" id="tab-FOCUS" class="pro-tab py-1.5 px-1 rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center transition">
+                <span class="text-[9px] font-bold tracking-wider text-zinc-400">FOCUS</span>
+                <span id="val-FOCUS" class="text-[11px] font-mono-tech text-zinc-200 mt-0.5">AUTO</span>
+            </button>
+            <button onclick="selectProTab('WB')" id="tab-WB" class="pro-tab py-1.5 px-1 rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center transition">
+                <span class="text-[9px] font-bold tracking-wider text-zinc-400">WB</span>
+                <span id="val-WB" class="text-[11px] font-mono-tech text-zinc-200 mt-0.5">5200K</span>
+            </button>
+        </div>
+
+        <!-- Primary Shutter Row: Gallery Thumbnail | Shutter Button | Front 12MP Switch -->
+        <div class="flex items-center justify-around pt-1">
+            <!-- Internal Gallery Thumbnail Button -->
+            <button onclick="openGalleryModal()" class="relative w-13 h-13 rounded-2xl bg-zinc-900 border-2 border-zinc-700 overflow-hidden flex items-center justify-center active:scale-95 transition shadow-lg group" title="Abrir Galería Expert RAW">
+                <img id="latestThumbImg" src="" alt="Última captura" class="hidden w-full h-full object-cover">
+                <div id="emptyGalleryIcon" class="flex flex-col items-center justify-center text-zinc-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <span id="galleryCountBadge" class="hidden absolute -top-1 -right-1 bg-amber-500 text-black text-[10px] font-bold px-1.5 rounded-full">0</span>
+            </button>
+
+            <!-- Tactile One UI Shutter Button -->
+            <button id="shutterButton" onclick="handleShutterAction()" class="relative w-18 h-18 rounded-full p-1 border-4 border-white/90 flex items-center justify-center active:scale-90 transition-transform shadow-[0_0_25px_rgba(255,255,255,0.2)]" aria-label="Capturar fotografía">
+                <div id="shutterInner" class="w-14 h-14 rounded-full bg-white transition-all duration-200 flex items-center justify-center">
+                    <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+                </div>
+            </button>
+
+            <!-- Front Camera 12MP Toggle -->
+            <button onclick="toggleFrontCamera()" id="btnFrontCam" class="w-13 h-13 rounded-2xl bg-zinc-900 border border-zinc-700/80 flex flex-col items-center justify-center text-zinc-200 hover:border-amber-500/50 active:scale-95 transition shadow-lg" title="Cámara Frontal 12MP Dual Pixel">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span class="text-[9px] font-mono-tech text-zinc-400 mt-0.5">12MP</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- INTERNAL GALLERY & EXIF METADATA MODAL -->
+    <div id="galleryModal" class="fixed inset-0 z-50 hidden bg-black/95 backdrop-blur-xl flex flex-col">
+        <!-- Modal Header -->
+        <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                <h2 class="text-sm font-bold tracking-wide text-white">GALERÍA EXPERT RAW • S23 ULTRA</h2>
+            </div>
+            <button onclick="closeGalleryModal()" class="px-3 py-1.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white">
+                Volver al Visor
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div id="galleryContent" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+            <!-- Populated dynamically via JS -->
+        </div>
+    </div>
+
+    <script>
+        /**
+         * S23 ULTRA PRO CAMERA APPLICATION STATE
+         * Strictly configured for functional hardware:
+         * - 1x (23mm f/1.7, 200MP ISOCELL HP2)
+         * - 3x (70mm f/2.4, 10MP Telephoto)
+         * - 10x (230mm f/4.9, 10MP Periscope)
+         * - Front (26mm f/2.2, 12MP Dual Pixel)
+         * NOTE: 0.6x Ultra-Wide and Macro modes are permanently excluded from hardware definitions.
+         */
+        const LENS_SPECS = {
+            '1x': {
+                id: '1x',
+                name: 'Gran Angular Principal',
+                focal: '23mm',
+                aperture: 'f/1.7',
+                sensor: '200MP',
+                zoomScale: 1.0,
+                desc: 'Gran Angular Principal • 23mm (200MP)'
+            },
+            '3x': {
+                id: '3x',
+                name: 'Teleobjetivo Óptico 1',
+                focal: '70mm',
+                aperture: 'f/2.4',
+                sensor: '10MP',
+                zoomScale: 1.85, // Simulated optical crop on live stream
+                desc: 'Teleobjetivo 1 • 70mm (10MP OIS)'
+            },
+            '10x': {
+                id: '10x',
+                name: 'Teleobjetivo Periscopio',
+                focal: '230mm',
+                aperture: 'f/4.9',
+                sensor: '10MP',
+                zoomScale: 3.4, // Simulated periscope magnification
+                desc: 'Periscopio Óptico • 230mm (10MP OIS)'
+            },
+            'FRONT': {
+                id: 'FRONT',
+                name: 'Cámara Frontal Selfie',
+                focal: '26mm',
+                aperture: 'f/2.2',
+                sensor: '12MP',
+                zoomScale: 1.0,
+                desc: 'Cámara Frontal Dual Pixel • 26mm (12MP)'
+            }
+        };
+
+        const PRO_PARAMS_CONFIG = {
+            ISO: {
+                label: 'ISO SENSIBILIDAD',
+                values: ['AUTO', '50', '100', '200', '400', '800', '1600', '3200'],
+                ticks: ['AUTO', '50', '200', '800', '1600', '3200']
+            },
+            SPEED: {
+                label: 'VELOCIDAD OBTURACIÓN',
+                values: ['AUTO', '1/4000', '1/1000', '1/500', '1/250', '1/125', '1/60', '1/15', '1/4', '1"', '4"'],
+                ticks: ['AUTO', '1/4000', '1/500', '1/125', '1/15', '4"']
+            },
+            EV: {
+                label: 'COMPENSACIÓN EXPOSICIÓN (EV)',
+                values: ['-2.0', '-1.5', '-1.0', '-0.5', '0.0', '+0.5', '+1.0', '+1.5', '+2.0'],
+                ticks: ['-2.0', '-1.0', '0.0', '+1.0', '+2.0']
+            },
+            FOCUS: {
+                label: 'ENFOQUE MANUAL (MF)',
+                values: ['AUTO', '0.1m', '0.3m', '0.7m', '1.5m', '3.0m', '10m', '∞'],
+                ticks: ['AUTO', '0.1m', '0.7m', '3.0m', '∞']
+            },
+            WB: {
+                label: 'BALANCE DE BLANCOS (KELVIN)',
+                values: ['AUTO', '2800K', '3500K', '4200K', '5200K', '6000K', '7500K', '9000K'],
+                ticks: ['AUTO', '2800K', '4200K', '5200K', '7500K', '9000K']
+            }
+        };
+
+        const state = {
+            currentLens: '1x',
+            previousRearLens: '1x',
+            isFrontCamera: false,
+            format: 'RAW 16-bit',
+            activeTab: 'ISO',
+            params: {
+                ISO: 0,    // index in values array
+                SPEED: 0,
+                EV: 4,     // '0.0'
+                FOCUS: 0,
+                WB: 0
+            },
+            showGrid: true,
+            showLevel: true,
+            focusPeaking: false,
+            usingFallback: false,
+            stream: null,
+            isRecording: false,
+            recSeconds: 0,
+            recInterval: null,
+            capturedPhotos: []
+        };
+
+        // DOM References
+        const videoEl = document.getElementById('cameraFeed');
+        const fallbackCanvas = document.getElementById('fallbackCanvas');
+        const fallbackCtx = fallbackCanvas.getContext('2d');
+        const histCanvas = document.getElementById('histogramCanvas');
+        const histCtx = histCanvas.getContext('2d');
+
+        /**
+         * Initialize WebRTC Camera with graceful fallback
+         */
+        async function initCamera() {
+            try {
+                if (state.stream) {
+                    state.stream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    audio: false,
+                    video: {
+                        facingMode: state.isFrontCamera ? 'user' : 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoEl.srcObject = state.stream;
+                videoEl.classList.remove('hidden');
+                fallbackCanvas.classList.add('hidden');
+                document.getElementById('fallbackBadge').classList.add('hidden');
+                state.usingFallback = false;
+                applyOpticalTransform();
+            } catch (err) {
+                console.warn('Cámara no disponible, activando simulador óptico:', err);
+                activateFallbackSimulator();
+            }
+        }
+
+        /**
+         * Interactive Optical Scene Simulator (Fallback if no webcam or permission denied)
+         */
+        function activateFallbackSimulator() {
+            state.usingFallback = true;
+            videoEl.classList.add('hidden');
+            fallbackCanvas.classList.remove('hidden');
+            document.getElementById('fallbackBadge').classList.remove('hidden');
+            resizeFallbackCanvas();
+        }
+
+        function resizeFallbackCanvas() {
+            const container = document.getElementById('viewfinderContainer');
+            fallbackCanvas.width = container.clientWidth || 640;
+            fallbackCanvas.height = container.clientHeight || 480;
+        }
+
+        let simFrame = 0;
+        function renderFallbackScene() {
+            if (!state.usingFallback) return;
+            simFrame += 0.015;
+            const w = fallbackCanvas.width;
+            const h = fallbackCanvas.height;
+
+            // Night/Dusk Architectural & Astronomical Test Chart (S23 Ultra Expert RAW style)
+            const grad = fallbackCtx.createLinearGradient(0, 0, 0, h);
+            grad.addColorStop(0, '#090d16');
+            grad.addColorStop(0.55, '#16213e');
+            grad.addColorStop(1, '#0f172a');
+            fallbackCtx.fillStyle = grad;
+            fallbackCtx.fillRect(0, 0, w, h);
+
+            // Simulated Moon / Distant Astro Target (Ideal to test 3x and 10x Periscope!)
+            const moonX = w * 0.68 + Math.sin(simFrame * 0.4) * 8;
+            const moonY = h * 0.32 + Math.cos(simFrame * 0.3) * 5;
+            const moonRadius = 26;
+
+            const glow = fallbackCtx.createRadialGradient(moonX, moonY, 4, moonX, moonY, moonRadius * 3.5);
+            glow.addColorStop(0, 'rgba(254, 243, 199, 0.45)');
+            glow.addColorStop(1, 'rgba(254, 243, 199, 0)');
+            fallbackCtx.fillStyle = glow;
+            fallbackCtx.beginPath();
+            fallbackCtx.arc(moonX, moonY, moonRadius * 3.5, 0, Math.PI * 2);
+            fallbackCtx.fill();
+
+            fallbackCtx.fillStyle = '#fef3c7';
+            fallbackCtx.beginPath();
+            fallbackCtx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+            fallbackCtx.fill();
+
+            // Lunar craters for zoom detail verification
+            fallbackCtx.fillStyle = 'rgba(180, 165, 130, 0.45)';
+            fallbackCtx.beginPath();
+            fallbackCtx.arc(moonX - 7, moonY - 5, 5, 0, Math.PI * 2);
+            fallbackCtx.arc(moonX + 8, moonY + 4, 7, 0, Math.PI * 2);
+            fallbackCtx.arc(moonX - 2, moonY + 9, 4, 0, Math.PI * 2);
+            fallbackCtx.fill();
+
+            // Skyline silhouettes
+            fallbackCtx.fillStyle = '#050811';
+            fallbackCtx.fillRect(w * 0.08, h * 0.58, w * 0.16, h * 0.42);
+            fallbackCtx.fillRect(w * 0.28, h * 0.48, w * 0.18, h * 0.52);
+            fallbackCtx.fillRect(w * 0.52, h * 0.62, w * 0.22, h * 0.38);
+            fallbackCtx.fillRect(w * 0.78, h * 0.52, w * 0.15, h * 0.48);
+
+            // Calibration crosshair & lens telemetry watermark inside viewfinder
+            fallbackCtx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
+            fallbackCtx.lineWidth = 1;
+            fallbackCtx.strokeRect(w * 0.2, h * 0.2, w * 0.6, h * 0.6);
+        }
+
+        /**
+         * Lens Switching (Strictly 1x, 3x, 10x or Front 12MP)
+         */
+        function selectLens(lensId) {
+            if (!LENS_SPECS[lensId]) return; // Guards against any invalid/0.6x lens call
+
+            if (lensId !== 'FRONT') {
+                state.previousRearLens = lensId;
+                if (state.isFrontCamera) {
+                    state.isFrontCamera = false;
+                    initCamera();
+                }
+            }
+
+            state.currentLens = lensId;
+            const spec = LENS_SPECS[lensId];
+
+            // Update Lens Pill UI
+            ['1x', '3x', '10x'].forEach(id => {
+                const btn = document.getElementById(`lens-${id}`);
+                if (!btn) return;
+                if (id === lensId) {
+                    btn.className = 'lens-btn w-11 h-11 rounded-full flex flex-col items-center justify-center bg-amber-500 text-black font-bold transition-all duration-200 scale-105 shadow-[0_0_12px_rgba(245,158,11,0.5)]';
+                    btn.querySelector('span:last-child').className = 'text-[8px] font-mono-tech opacity-80 mt-0.5';
+                } else {
+                    btn.className = 'lens-btn w-10 h-10 rounded-full flex flex-col items-center justify-center bg-zinc-900/90 text-zinc-300 hover:text-white border border-zinc-700/70 font-semibold transition-all duration-200';
+                    btn.querySelector('span:last-child').className = 'text-[8px] font-mono-tech text-zinc-400 mt-0.5';
+                }
+            });
+
+            // Update Telemetry Readouts
+            document.getElementById('lensDescription').textContent = spec.desc;
+            document.getElementById('telemetryLens').textContent = spec.focal;
+            document.getElementById('telemetryAperture').textContent = spec.aperture;
+            document.getElementById('telemetryRes').textContent = spec.sensor;
+
+            applyOpticalTransform();
+            showToast(`Lente ${spec.id} (${spec.focal} • ${spec.aperture})`);
+        }
+
+        function toggleFrontCamera() {
+            state.isFrontCamera = !state.isFrontCamera;
+            const btn = document.getElementById('btnFrontCam');
+
+            if (state.isFrontCamera) {
+                btn.classList.add('border-amber-500', 'bg-amber-500/20');
+                selectLens('FRONT');
+            } else {
+                btn.classList.remove('border-amber-500', 'bg-amber-500/20');
+                selectLens(state.previousRearLens);
+            }
+            initCamera();
+        }
+
+        /**
+         * Apply Optical Zoom Scale & Manual Exposure/WB/Focus CSS Filters to Live Viewfinder
+         */
+        function applyOpticalTransform() {
+            const spec = LENS_SPECS[state.currentLens];
+            const mirror = state.isFrontCamera ? 'scaleX(-1) ' : '';
+            const transformVal = `${mirror}scale(${spec.zoomScale})`;
+
+            // Calculate simulated exposure, contrast & white balance color temperature
+            const evIndex = state.params.EV; // 0..8, 4 is 0.0
+            const evOffset = (evIndex - 4) * 0.16;
+            const isoBoost = state.params.ISO > 0 ? (state.params.ISO * 0.06) : 0;
+            const brightness = Math.max(0.35, Math.min(2.1, 1 + evOffset + isoBoost));
+
+            // White Balance tint simulation
+            const wbIdx = state.params.WB;
+            let sepia = 0;
+            let hue = 0;
+            if (wbIdx > 0) {
+                if (wbIdx <= 3) { // Cool 2800K-4200K
+                    hue = -12 * (4 - wbIdx);
+                } else if (wbIdx >= 5) { // Warm 6000K-9000K
+                    sepia = 0.12 * (wbIdx - 4);
+                }
+            }
+
+            // Slight blur simulation if Manual Focus is adjusted away from AUTO
+            const focusBlur = state.params.FOCUS > 0 ? 0.3 : 0;
+            const filterVal = `brightness(${brightness.toFixed(2)}) contrast(1.06) sepia(${sepia.toFixed(2)}) hue-rotate(${hue}deg) blur(${focusBlur}px)`;
+
+            videoEl.style.transform = transformVal;
+            videoEl.style.filter = filterVal;
+
+            fallbackCanvas.style.transform = transformVal;
+            fallbackCanvas.style.filter = filterVal;
+        }
+
+        /**
+         * Pro Manual Controls Logic
+         */
+        function selectProTab(tabName) {
+            state.activeTab = tabName;
+            const cfg = PRO_PARAMS_CONFIG[tabName];
+            const currentIdx = state.params[tabName];
+
+            // Update Tabs Highlight
+            Object.keys(PRO_PARAMS_CONFIG).forEach(key => {
+                const tabEl = document.getElementById(`tab-${key}`);
+                const labelEl = tabEl.querySelector('span:first-child');
+                if (key === tabName) {
+                    tabEl.className = 'pro-tab py-1.5 px-1 rounded-xl bg-amber-500/15 border border-amber-500/60 flex flex-col items-center justify-center transition';
+                    labelEl.className = 'text-[9px] font-bold tracking-wider text-amber-400';
+                } else {
+                    tabEl.className = 'pro-tab py-1.5 px-1 rounded-xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center transition';
+                    labelEl.className = 'text-[9px] font-bold tracking-wider text-zinc-400';
+                }
+            });
+
+            // Configure Slider
+            const slider = document.getElementById('proParamSlider');
+            slider.min = 0;
+            slider.max = cfg.values.length - 1;
+            slider.step = 1;
+            slider.value = currentIdx;
+
+            document.getElementById('activeParamLabel').textContent = cfg.label;
+            document.getElementById('activeParamValue').textContent = cfg.values[currentIdx];
+
+            // Update Ticks
+            const ticksContainer = document.getElementById('sliderTicks');
+            ticksContainer.innerHTML = cfg.ticks.map(t => `<span>${t}</span>`).join('');
+        }
+
+        document.getElementById('proParamSlider').addEventListener('input', (e) => {
+            const idx = parseInt(e.target.value, 10);
+            const tab = state.activeTab;
+            const cfg = PRO_PARAMS_CONFIG[tab];
+            const valStr = cfg.values[idx];
+
+            state.params[tab] = idx;
+            document.getElementById('activeParamValue').textContent = valStr;
+            document.getElementById(`val-${tab}`).textContent = valStr;
+
+            // Auto-enable Focus Peaking visual feedback when adjusting Manual Focus
+            if (tab === 'FOCUS' && idx > 0 && !state.focusPeaking) {
+                toggleFocusPeaking(true);
+            }
+
+            applyOpticalTransform();
+        });
+
+        function resetCurrentParam() {
+            const tab = state.activeTab;
+            const defaultIdx = tab === 'EV' ? 4 : 0;
+            state.params[tab] = defaultIdx;
+            const valStr = PRO_PARAMS_CONFIG[tab].values[defaultIdx];
+
+            document.getElementById('proParamSlider').value = defaultIdx;
+            document.getElementById('activeParamValue').textContent = valStr;
+            document.getElementById(`val-${tab}`).textContent = valStr;
+            applyOpticalTransform();
+            showToast(`${tab} restablecido a ${valStr}`);
+        }
+
+        /**
+         * Capture Format Selector
+         */
+        function setFormat(fmt) {
+            state.format = fmt;
+            document.querySelectorAll('.format-btn').forEach(btn => {
+                if (btn.dataset.format === fmt) {
+                    btn.className = 'format-btn px-2.5 py-1 rounded-full bg-amber-500 text-black font-bold transition';
+                } else {
+                    btn.className = 'format-btn px-2.5 py-1 rounded-full text-zinc-400 hover:text-white transition';
+                }
+            });
+
+            const shutterInner = document.getElementById('shutterInner');
+            if (fmt === 'PRO VIDEO 8K') {
+                shutterInner.classList.remove('bg-white');
+                shutterInner.classList.add('bg-red-500');
+                document.getElementById('histPeak').textContent = 'LOG 10b';
+            } else {
+                shutterInner.classList.remove('bg-red-500', 'rounded-xl', 'scale-75');
+                shutterInner.classList.add('bg-white', 'rounded-full');
+                document.getElementById('histPeak').textContent = fmt === 'RAW 16-bit' ? 'RAW 16b' : 'JPG 8b';
+            }
+            showToast(`Formato: ${fmt}`);
+        }
+
+        /**
+         * Overlays: Rule of Thirds Grid, Electronic Leveler, Focus Peaking
+         */
+        function toggleGrid() {
+            state.showGrid = !state.showGrid;
+            document.getElementById('gridOverlay').classList.toggle('hidden', !state.showGrid);
+            const btn = document.getElementById('btnGrid');
+            btn.classList.toggle('border-amber-500/50', state.showGrid);
+            btn.classList.toggle('text-amber-400', state.showGrid);
+            btn.classList.toggle('border-zinc-700', !state.showGrid);
+            btn.classList.toggle('text-zinc-400', !state.showGrid);
+        }
+
+        function toggleLevel() {
+            state.showLevel = !state.showLevel;
+            document.getElementById('levelOverlay').classList.toggle('hidden', !state.showLevel);
+            const btn = document.getElementById('btnLevel');
+            btn.classList.toggle('border-amber-500/50', state.showLevel);
+            btn.classList.toggle('text-amber-400', state.showLevel);
+            btn.classList.toggle('border-zinc-700', !state.showLevel);
+            btn.classList.toggle('text-zinc-400', !state.showLevel);
+        }
+
+        function toggleFocusPeaking(forceState) {
+            state.focusPeaking = typeof forceState === 'boolean' ? forceState : !state.focusPeaking;
+            document.getElementById('peakingLayer').classList.toggle('hidden', !state.focusPeaking);
+            const btn = document.getElementById('btnFocusPeaking');
+            btn.classList.toggle('border-emerald-500', state.focusPeaking);
+            btn.classList.toggle('text-emerald-400', state.focusPeaking);
+            btn.classList.toggle('border-zinc-700', !state.focusPeaking);
+            btn.classList.toggle('text-zinc-400', !state.focusPeaking);
+            if (state.focusPeaking) showToast('Focus Peaking Activado');
+        }
+
+        // Tap-to-focus interaction on Viewfinder
+        document.getElementById('viewfinderContainer').addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const reticle = document.getElementById('focusReticle');
+            reticle.style.left = `${x}px`;
+            reticle.style.top = `${y}px`;
+            reticle.classList.remove('hidden');
+            reticle.classList.add('scale-110');
+            setTimeout(() => reticle.classList.remove('scale-110'), 150);
+        });
+
+        // Device Orientation for Electronic Horizon Leveler
+        window.addEventListener('deviceorientation', (event) => {
+            if (!state.showLevel || event.gamma === null) return;
+            const tilt = Math.max(-25, Math.min(25, event.gamma));
+            updateHorizonUI(tilt);
+        });
+
+        function updateHorizonUI(deg) {
+            const line = document.getElementById('horizonLine');
+            const text = document.getElementById('tiltAngleText');
+            line.style.transform = `rotate(${-deg}deg)`;
+            text.textContent = `${Math.abs(deg).toFixed(1)}°`;
+
+            if (Math.abs(deg) < 1.2) {
+                line.classList.remove('bg-amber-400');
+                line.classList.add('bg-emerald-400');
+            } else {
+                line.classList.remove('bg-emerald-400');
+                line.classList.add('bg-amber-400');
+            }
+        }
+
+        /**
+         * Shutter Action: Captures frame + Lens Metadata into Internal Gallery
+         */
+        function handleShutterAction() {
+            if (state.format === 'PRO VIDEO 8K') {
+                toggleVideoRecording();
+                return;
+            }
+            capturePhoto();
+        }
+
+        function toggleVideoRecording() {
+            state.isRecording = !state.isRecording;
+            const indicator = document.getElementById('videoRecIndicator');
+            const inner = document.getElementById('shutterInner');
+
+            if (state.isRecording) {
+                state.recSeconds = 0;
+                indicator.classList.remove('hidden');
+                inner.classList.remove('rounded-full');
+                inner.classList.add('rounded-xl', 'scale-75');
+                showToast('Grabando Pro Video 8K 30fps...');
+                state.recInterval = setInterval(() => {
+                    state.recSeconds++;
+                    const mins = String(Math.floor(state.recSeconds / 60)).padStart(2, '0');
+                    const secs = String(state.recSeconds % 60).padStart(2, '0');
+                    document.getElementById('recTimer').textContent = `${mins}:${secs}`;
+                }, 1000);
+            } else {
+                clearInterval(state.recInterval);
+                indicator.classList.add('hidden');
+                inner.classList.remove('rounded-xl', 'scale-75');
+                inner.classList.add('rounded-full');
+                capturePhoto(true); // Save video thumbnail snapshot with metadata
+            }
+        }
+
+        function capturePhoto(isVideoSnapshot = false) {
+            // Trigger Shutter Flash
+            const flash = document.getElementById('shutterFlash');
+            flash.classList.remove('animate-shutter');
+            void flash.offsetWidth; // trigger reflow
+            flash.classList.add('animate-shutter');
+
+            // Render cropped optical frame to offscreen canvas
+            const offCanvas = document.createElement('canvas');
+            const spec = LENS_SPECS[state.currentLens];
+            offCanvas.width = 640;
+            offCanvas.height = 480;
+            const ctx = offCanvas.getContext('2d');
+
+            ctx.save();
+            if (state.isFrontCamera) {
+                ctx.translate(offCanvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+
+            // Apply optical magnification crop matching current lens (1x, 3x, 10x)
+            const zoom = spec.zoomScale;
+            const sw = (state.usingFallback ? fallbackCanvas.width : (videoEl.videoWidth || 640)) / zoom;
+            const sh = (state.usingFallback ? fallbackCanvas.height : (videoEl.videoHeight || 480)) / zoom;
+            const sx = ((state.usingFallback ? fallbackCanvas.width : (videoEl.videoWidth || 640)) - sw) / 2;
+            const sy = ((state.usingFallback ? fallbackCanvas.height : (videoEl.videoHeight || 480)) - sh) / 2;
+
+            ctx.filter = videoEl.style.filter || 'none';
+            const sourceEl = state.usingFallback ? fallbackCanvas : videoEl;
+            ctx.drawImage(sourceEl, sx, sy, sw, sh, 0, 0, offCanvas.width, offCanvas.height);
+            ctx.restore();
+
+            // Subtle Expert RAW EXIF Watermark in bottom corner of saved image
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.fillRect(0, offCanvas.height - 28, offCanvas.width, 28);
+            ctx.fillStyle = '#FBBF24';
+            ctx.font = 'bold 11px monospace';
+            const isoVal = PRO_PARAMS_CONFIG.ISO.values[state.params.ISO];
+            const spdVal = PRO_PARAMS_CONFIG.SPEED.values[state.params.SPEED];
+            const wbVal = PRO_PARAMS_CONFIG.WB.values[state.params.WB];
+            ctx.fillText(`GALAXY S23 ULTRA | LENTE ${spec.id} (${spec.focal} ${spec.aperture}) | ISO ${isoVal} | ${spdVal}s`, 12, offCanvas.height - 10);
+
+            const dataUrl = offCanvas.toDataURL('image/jpeg', 0.92);
+            const now = new Date();
+            const timestamp = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            const photoRecord = {
+                id: Date.now(),
+                dataUrl,
+                lensId: spec.id,
+                lensName: spec.name,
+                focal: spec.focal,
+                aperture: spec.aperture,
+                sensor: spec.sensor,
+                format: isVideoSnapshot ? `VIDEO 8K (${document.getElementById('recTimer').textContent})` : state.format,
+                iso: isoVal,
+                speed: spdVal,
+                ev: PRO_PARAMS_CONFIG.EV.values[state.params.EV],
+                wb: wbVal,
+                timestamp
+            };
+
+            state.capturedPhotos.unshift(photoRecord);
+            updateGalleryThumbnail();
+            showToast(`Guardado [${spec.id} • ${spec.focal}] en ${photoRecord.format}`);
+        }
+
+        function updateGalleryThumbnail() {
+            const count = state.capturedPhotos.length;
+            const thumbImg = document.getElementById('latestThumbImg');
+            const emptyIcon = document.getElementById('emptyGalleryIcon');
+            const badge = document.getElementById('galleryCountBadge');
+
+            if (count > 0) {
+                thumbImg.src = state.capturedPhotos[0].dataUrl;
+                thumbImg.classList.remove('hidden');
+                emptyIcon.classList.add('hidden');
+                badge.textContent = count;
+                badge.classList.remove('hidden');
+            }
+        }
+
+        function openGalleryModal() {
+            const modal = document.getElementById('galleryModal');
+            const container = document.getElementById('galleryContent');
+            modal.classList.remove('hidden');
+
+            if (state.capturedPhotos.length === 0) {
+                container.innerHTML = `
+                    <div class="flex-1 flex flex-col items-center justify-center text-center py-16 text-zinc-500">
+                        <p class="text-sm font-semibold text-zinc-300">Aún no hay capturas en esta sesión</p>
+                        <p class="text-xs mt-1 max-w-xs">Usa los lentes funcionales 1x (23mm), 3x (70mm) o 10x (230mm) y presiona el obturador.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = state.capturedPhotos.map(item => `
+                <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col sm:flex-row shadow-xl">
+                    <div class="sm:w-56 aspect-video sm:aspect-auto bg-black relative">
+                        <img src="${item.dataUrl}" alt="Captura ${item.lensId}" class="w-full h-full object-cover">
+                        <span class="absolute top-2 left-2 bg-amber-500 text-black text-[11px] font-bold px-2 py-0.5 rounded-full shadow">
+                            Lente ${item.lensId} (${item.focal})
+                        </span>
+                    </div>
+                    <div class="p-3.5 flex-1 flex flex-col justify-between gap-2">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-white">${item.lensName}</span>
+                                <span class="text-[10px] font-mono-tech text-zinc-400">${item.timestamp}</span>
+                            </div>
+                            <p class="text-[11px] font-mono-tech text-amber-400 mt-0.5">${item.format} • Sensor ${item.sensor} • ${item.aperture}</p>
+                        </div>
+                        <div class="grid grid-cols-4 gap-1.5 bg-zinc-950 p-2 rounded-xl border border-zinc-800/80 text-center font-mono-tech">
+                            <div>
+                                <span class="block text-[9px] text-zinc-500">ISO</span>
+                                <span class="text-[11px] text-zinc-200">${item.iso}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] text-zinc-500">OBTUR.</span>
+                                <span class="text-[11px] text-zinc-200">${item.speed}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] text-zinc-500">EV</span>
+                                <span class="text-[11px] text-zinc-200">${item.ev}</span>
+                            </div>
+                            <div>
+                                <span class="block text-[9px] text-zinc-500">WB</span>
+                                <span class="text-[11px] text-zinc-200">${item.wb}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function closeGalleryModal() {
+            document.getElementById('galleryModal').classList.add('hidden');
+        }
+
+        /**
+         * Real-Time Simulated RGB / Luminance Histogram & Animation Loop
+         */
+        let histPhase = 0;
+        function updateLiveHistogram() {
+            histPhase += 0.08;
+            const w = histCanvas.width;
+            const h = histCanvas.height;
+            histCtx.clearRect(0, 0, w, h);
+
+            // Shift curve dynamically based on current EV & ISO settings
+            const evShift = (state.params.EV - 4) * 5;
+            const isoSpread = state.params.ISO * 1.5;
+
+            // Draw Luminance & Amber/Cyan channels
+            const channels = [
+                { color: 'rgba(251, 191, 36, 0.55)', offset: 0 },
+                { color: 'rgba(56, 189, 248, 0.35)', offset: -6 }
+            ];
+
+            channels.forEach(ch => {
+                histCtx.beginPath();
+                histCtx.moveTo(0, h);
+                for (let x = 0; x <= w; x += 3) {
+                    const norm = (x - (w * 0.48 + evShift + ch.offset)) / (18 + isoSpread);
+                    const bell = Math.exp(-0.5 * norm * norm);
+                    const ripple = Math.sin(x * 0.25 + histPhase) * 0.12 + 0.88;
+                    const y = h - (bell * ripple * (h - 4));
+                    histCtx.lineTo(x, y);
+                }
+                histCtx.lineTo(w, h);
+                histCtx.closePath();
+                histCtx.fillStyle = ch.color;
+                histCtx.fill();
+            });
+        }
+
+        /**
+         * Toast Helper
+         */
+        let toastTimeout;
+        function showToast(msg) {
+            const banner = document.getElementById('toastBanner');
+            document.getElementById('toastText').textContent = msg;
+            banner.classList.remove('opacity-0', '-translate-y-4');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                banner.classList.add('opacity-0', '-translate-y-4');
+            }, 1800);
+        }
+
+        /**
+         * Main Render Loop
+         */
+        function mainLoop() {
+            renderFallbackScene();
+            updateLiveHistogram();
+            requestAnimationFrame(mainLoop);
+        }
+
+        window.addEventListener('resize', () => {
+            if (state.usingFallback) resizeFallbackCanvas();
+        });
+
+        window.onload = function () {
+            selectProTab('ISO');
+            initCamera();
+            mainLoop();
+        };
+    </script>
+</body>
+</html>
